@@ -1,0 +1,423 @@
+{
+  "entities": {
+    "AppUser": {
+      "title": "AppUser",
+      "description": "Authenticated Google user profile and role-approval state for RBAC",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "description": "Verified Google account email", "maxLength": 160 },
+        "displayName": { "type": "string", "description": "User full display name", "maxLength": 120 },
+        "phone": { "type": "string", "description": "Optional phone number", "maxLength": 32 },
+        "photoUrl": { "type": "string", "description": "Profile avatar URL", "maxLength": 512 },
+        "role": { "type": "string", "description": "Assigned RBAC role", "enum": ["pending", "director", "admin", "manager", "staff", "partner"] },
+        "requestedRole": { "type": "string", "description": "Role requested on sign-up", "enum": ["staff", "partner", "manager", "director"] },
+        "status": { "type": "string", "description": "Approval workflow state", "enum": ["pending", "approved", "rejected"] },
+        "linkedStaffId": { "type": "string", "description": "Linked staff document ID", "maxLength": 128 },
+        "linkedPartnerId": { "type": "string", "description": "Linked partner document ID", "maxLength": 128 },
+        "approvedBy": { "type": "string", "description": "Approving director name", "maxLength": 120 },
+        "approvedByUid": { "type": "string", "description": "Approving director UID", "maxLength": 128 },
+        "approvedAt": { "type": "string", "description": "Approval ISO timestamp", "maxLength": 64 },
+        "rejectionReason": { "type": "string", "description": "Optional rejection reason", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp" }
+      },
+      "required": ["uid", "email", "displayName", "role", "status", "createdAt", "updatedAt"]
+    },
+    "AdminMarker": {
+      "title": "AdminMarker",
+      "description": "Protected admin/director UID marker for Firestore rules RBAC",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID of the admin", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "description": "Verified admin email", "maxLength": 160 },
+        "role": { "type": "string", "enum": ["director", "admin"] },
+        "grantedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when admin marker was created" },
+        "grantedBy": { "type": "string", "description": "UID or bootstrap marker", "maxLength": 128 }
+      },
+      "required": ["uid", "email", "role", "grantedAt"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Company profile information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Company name", "maxLength": 160 },
+        "subTitle": { "type": "string", "description": "Company subtitle", "maxLength": 240 },
+        "ownerName": { "type": "string", "description": "Owner name", "maxLength": 120 },
+        "phone": { "type": "string", "description": "Contact phone", "maxLength": 32 },
+        "email": { "type": "string", "description": "Contact email", "maxLength": 160 },
+        "address": { "type": "string", "description": "Office address", "maxLength": 300 },
+        "logoUrl": { "type": "string", "description": "Logo URL", "maxLength": 150000 },
+        "currencySymbol": { "type": "string", "description": "Currency symbol", "maxLength": 12 },
+        "dailyExpenseThreshold": { "type": "number", "description": "Daily expense alert threshold in BDT" },
+        "troubleshootPortalUrl": { "type": "string", "description": "Troubleshooting and problem solution web portal URL", "maxLength": 500 },
+        "updatedAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["name", "ownerName"]
+    },
+    "Partner": {
+      "title": "Partner",
+      "description": "Business partners & equity share records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Partner ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "description": "Partner full name", "maxLength": 120 },
+        "phone": { "type": "string", "description": "Partner phone number", "maxLength": 32 },
+        "role": { "type": "string", "description": "Designation/Role in business", "maxLength": 120 },
+        "investment": { "type": "number", "description": "Total invested BDT" },
+        "sharePercentage": { "type": "number", "description": "Equity share percentage" },
+        "occupation": { "type": "string", "description": "Partner profession / occupation", "maxLength": 120 },
+        "fatherName": { "type": "string", "description": "Partner father's name", "maxLength": 120 },
+        "motherName": { "type": "string", "description": "Partner mother's name", "maxLength": 120 },
+        "address": { "type": "string", "description": "Residential address", "maxLength": 300 },
+        "permanentAddress": { "type": "string", "description": "Permanent address", "maxLength": 300 },
+        "nidNumber": { "type": "string", "description": "National ID number", "maxLength": 64 },
+        "email": { "type": "string", "description": "Partner email", "maxLength": 160 },
+        "photoUrl": { "type": "string", "description": "Partner photo data URL or link", "maxLength": 400000 },
+        "nidPhotoUrl": { "type": "string", "description": "Partner NID card photo data URL or link", "maxLength": 400000 },
+        "fatherNidPhotoUrl": { "type": "string", "description": "Father's NID card photo data URL or link", "maxLength": 400000 },
+        "motherNidPhotoUrl": { "type": "string", "description": "Mother's NID card photo data URL or link", "maxLength": 400000 },
+        "joinedDate": { "type": "string", "description": "Partnership joined date", "maxLength": 64 },
+        "investmentHistory": { "type": "array", "description": "List of historical investments" },
+        "notes": { "type": "string", "description": "Notes", "maxLength": 500 },
+        "pin": { "type": "string", "description": "Legacy reference code", "maxLength": 12 },
+        "status": { "type": "string", "description": "active or inactive", "enum": ["active", "inactive"] },
+        "updatedAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "name", "investment"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Staff and technicians directory with payroll, photo, areas, and RBAC portal permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Staff ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "description": "Staff name", "maxLength": 120 },
+        "fatherName": { "type": "string", "description": "Father's name", "maxLength": 120 },
+        "motherName": { "type": "string", "description": "Mother's name", "maxLength": 120 },
+        "phone": { "type": "string", "description": "Phone number", "maxLength": 32 },
+        "email": { "type": "string", "description": "Email address", "maxLength": 160 },
+        "nid": { "type": "string", "description": "National ID number", "maxLength": 64 },
+        "address": { "type": "string", "description": "Residential address", "maxLength": 300 },
+        "permanentAddress": { "type": "string", "description": "Permanent address", "maxLength": 300 },
+        "bloodGroup": { "type": "string", "description": "Blood group", "maxLength": 16 },
+        "education": { "type": "string", "description": "Education qualification", "maxLength": 120 },
+        "emergencyContact": { "type": "string", "description": "Emergency contact number", "maxLength": 32 },
+        "designation": { "type": "string", "description": "Designation", "maxLength": 120 },
+        "salary": { "type": "number", "description": "Monthly salary BDT" },
+        "joinedAt": { "type": "string", "description": "Date joined", "maxLength": 64 },
+        "photoUrl": { "type": "string", "description": "Photo data URL or image link", "maxLength": 400000 },
+        "pin": { "type": "string", "description": "Staff PIN code", "maxLength": 12 },
+        "status": { "type": "string", "description": "active or inactive", "enum": ["active", "inactive"] },
+        "allowedPortals": { "type": "array", "description": "Permitted ERP portal IDs this staff can open and enter data into" },
+        "actionPermissions": { "type": "object", "description": "Admin-defined granular add, edit, delete, and work permissions for staff" },
+        "assignedAreas": { "type": "array", "description": "Service area names assigned to this technician for automatic complaint routing" },
+        "oltPonScopes": { "type": "array", "description": "OLT PON port scopes (e.g. PON1, PON2) assigned to this technician" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "name", "salary"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Daily income and expense transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Transaction ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "description": "income or expense", "enum": ["income", "expense"] },
+        "date": { "type": "string", "description": "Transaction date YYYY-MM-DD", "maxLength": 32 },
+        "title": { "type": "string", "description": "Description / Purpose", "maxLength": 300 },
+        "category": { "type": "string", "description": "Category name in Bengali", "maxLength": 120 },
+        "amount": { "type": "number", "description": "Amount in BDT" },
+        "paymentMethod": { "type": "string", "description": "cash, bkash, nagad, bank, etc.", "maxLength": 32 },
+        "addedBy": { "type": "string", "description": "Name of the person who added this", "maxLength": 120 },
+        "addedById": { "type": "string", "description": "admin or staff-id", "maxLength": 128 },
+        "addedByUid": { "type": "string", "description": "Firebase Auth UID of creator", "maxLength": 128 },
+        "note": { "type": "string", "description": "Additional note / memo", "maxLength": 1000 },
+        "createdAt": { "type": "string", "description": "ISO timestamp of creation", "maxLength": 64 }
+      },
+      "required": ["id", "type", "date", "title", "amount"]
+    },
+    "CustomerDue": {
+      "title": "CustomerDue",
+      "description": "Customer dues and collection records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Due ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerName": { "type": "string", "description": "Customer full name", "maxLength": 160 },
+        "phone": { "type": "string", "description": "Customer phone", "maxLength": 32 },
+        "address": { "type": "string", "description": "Customer line location/area", "maxLength": 300 },
+        "totalDue": { "type": "number", "description": "Total due amount BDT" },
+        "paidAmount": { "type": "number", "description": "Paid amount BDT" },
+        "currentDue": { "type": "number", "description": "Remaining due BDT" },
+        "notes": { "type": "string", "description": "Notes or package details", "maxLength": 1000 },
+        "updatedAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "customerName", "totalDue"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "System settings, digital notice, officers, release metadata, and director-only PIN auth",
+      "type": "object",
+      "properties": {
+        "adminPin": { "type": "string", "description": "Director confirmation PIN (settings/auth only, admin-only read/write)", "maxLength": 12 },
+        "adminPhone": { "type": "string", "description": "Director phone (settings/auth only)", "maxLength": 32 },
+        "pin": { "type": "string", "description": "Legacy director confirmation PIN field", "maxLength": 12 },
+        "phone": { "type": "string", "description": "Legacy director phone field", "maxLength": 32 },
+        "currencySymbol": { "type": "string", "description": "Currency symbol", "maxLength": 12 },
+        "text": { "type": "string", "description": "Notice banner primary line 1 text", "maxLength": 1000 },
+        "subText": { "type": "string", "description": "Notice banner secondary line 2 text", "maxLength": 1000 },
+        "showClock": { "type": "boolean", "description": "Whether real-time digital clock is shown" },
+        "fontSize": { "type": "string", "description": "Display font size", "maxLength": 24 },
+        "color": { "type": "string", "description": "Notice color", "maxLength": 24 },
+        "mode": { "type": "string", "description": "Notice animation mode", "maxLength": 24 },
+        "speed": { "type": "string", "description": "Notice speed", "maxLength": 24 },
+        "active": { "type": "boolean", "description": "Notice active flag" },
+        "initialized": { "type": "boolean", "description": "Whether backup has been imported" },
+        "version": { "type": "string", "description": "Published app semantic version", "maxLength": 32 },
+        "buildId": { "type": "string", "description": "Unique build identifier", "maxLength": 128 },
+        "buildTime": { "type": "string", "description": "Build ISO timestamp", "maxLength": 64 },
+        "releaseNotes": { "type": "array", "description": "List of Bengali release notes" },
+        "publishedBy": { "type": "string", "description": "Director name who pushed the release", "maxLength": 120 },
+        "groupName": { "type": "string", "description": "WhatsApp complain group name", "maxLength": 160 },
+        "groupInviteLink": { "type": "string", "description": "WhatsApp complain group invite URL", "maxLength": 300 },
+        "staffGroupName": { "type": "string", "description": "WhatsApp staff team group name", "maxLength": 160 },
+        "staffGroupInviteLink": { "type": "string", "description": "WhatsApp staff team group invite URL", "maxLength": 300 },
+        "partnerGroupName": { "type": "string", "description": "WhatsApp share partner group name", "maxLength": 160 },
+        "partnerGroupInviteLink": { "type": "string", "description": "WhatsApp share partner group invite URL", "maxLength": 300 },
+        "smsAlertPhone": { "type": "string", "description": "Fallback SMS recipient mobile number", "maxLength": 32 },
+        "autoOpenWhatsAppOnSubmit": { "type": "boolean", "description": "Automatically trigger WhatsApp share when complaint is submitted" },
+        "webhookUrl": { "type": "string", "description": "Optional WhatsApp gateway/bot webhook endpoint URL", "maxLength": 400 },
+        "clearedAt": { "type": "string", "description": "ISO timestamp when Admin deleted all notifications", "maxLength": 64 },
+        "clearedBy": { "type": "string", "description": "Admin name who cleared all notifications", "maxLength": 120 },
+        "clearedKeys": { "type": "array", "description": "Notification keys cleared by Admin" },
+        "customSpeedPxPerSec": { "type": "number", "description": "Notice scroll speed px/sec" },
+        "pauseOnHover": { "type": "boolean", "description": "Pause marquee on hover" },
+        "showRow3Notifications": { "type": "boolean", "description": "Show Row 3 live alerts" },
+        "row3FontSize": { "type": "string", "description": "Row 3 font size", "maxLength": 24 },
+        "row3Mode": { "type": "string", "description": "Row 3 animation mode", "maxLength": 24 },
+        "row3SpeedPxPerSec": { "type": "number", "description": "Row 3 scroll speed" },
+        "row3SlideIntervalSec": { "type": "number", "description": "Row 3 slide interval sec" },
+        "updatedBy": { "type": "string", "description": "Updater display name", "maxLength": 120 },
+        "manager": { "type": "object", "description": "Appointed manager officer object" },
+        "auditor": { "type": "object", "description": "Appointed auditor officer object" },
+        "history": { "type": "array", "description": "Previous officers history list" },
+        "complaintsSeeded": { "type": "boolean", "description": "One-time complaints seed flag" },
+        "transactionsSeeded": { "type": "boolean", "description": "One-time transactions seed flag" },
+        "transactions": { "type": "array", "description": "Deleted transaction ID tombstones" },
+        "staffs": { "type": "array", "description": "Deleted staff ID tombstones" },
+        "partners": { "type": "array", "description": "Deleted partner ID tombstones" },
+        "customerDues": { "type": "array", "description": "Deleted due ID tombstones" },
+        "complaints": { "type": "array", "description": "Deleted complaint ID tombstones" },
+        "customers": { "type": "array", "description": "Deleted customer ID tombstones" },
+        "joinRequests": { "type": "array", "description": "Deleted joinRequest ID tombstones" },
+        "deletedPortalIds": { "type": "array", "description": "Built-in portal IDs deleted/hidden from installed apps" },
+        "disabledPortalIds": { "type": "array", "description": "Portal IDs temporarily paused/locked by Director" },
+        "customPortals": { "type": "array", "description": "Director-added external or in-app linked custom portals" },
+        "portalOverrides": { "type": "object", "description": "Per-portal custom label, title, or URL overrides" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 }
+      }
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Customer complaints and service ticketing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Complaint ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "description": "Customer name", "maxLength": 160 },
+        "idNumber": { "type": "string", "description": "Customer ID or connection number", "maxLength": 80 },
+        "mobileNumber": { "type": "string", "description": "Customer mobile phone number", "maxLength": 32 },
+        "address": { "type": "string", "description": "Customer line location or address", "maxLength": 300 },
+        "packageName": { "type": "string", "description": "Customer internet package", "maxLength": 120 },
+        "oltInfo": { "type": "string", "description": "OLT and PON port info", "maxLength": 200 },
+        "oltPower": { "type": "string", "description": "ONU optical power and fiber distance", "maxLength": 120 },
+        "complainDetails": { "type": "string", "description": "Complaint details or problem description", "maxLength": 1500 },
+        "status": { "type": "string", "description": "pending, in_progress, or resolved", "enum": ["pending", "in_progress", "resolved"] },
+        "priority": { "type": "string", "description": "normal, urgent, or critical", "enum": ["normal", "urgent", "critical"] },
+        "assignedStaffId": { "type": "string", "description": "Assigned technician/staff ID", "maxLength": 128 },
+        "assignedStaffName": { "type": "string", "description": "Assigned technician/staff name", "maxLength": 120 },
+        "autoAssignedReason": { "type": "string", "description": "Location or OLT PON matching reason for automatic assignment", "maxLength": 300 },
+        "reportedBy": { "type": "string", "description": "Staff or person who logged the complaint", "maxLength": 120 },
+        "reportedById": { "type": "string", "description": "Reporter ID or UID", "maxLength": 128 },
+        "resolutionNote": { "type": "string", "description": "Details of resolution", "maxLength": 1000 },
+        "resolvedAt": { "type": "string", "description": "Resolution ISO timestamp", "maxLength": 64 },
+        "date": { "type": "string", "description": "Complaint local date YYYY-MM-DD", "maxLength": 32 },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp", "maxLength": 64 },
+        "updatedAt": { "type": "string", "description": "Last update ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "name", "idNumber", "mobileNumber", "address", "complainDetails", "status"]
+    },
+    "JoinRequest": {
+      "title": "JoinRequest",
+      "description": "Self-joining applications from Google-signed-in Staff and Share Partners",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Join Request ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "description": "Firebase Auth UID of the applicant", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "description": "Applicant verified email", "maxLength": 160 },
+        "role": { "type": "string", "description": "staff or partner", "enum": ["staff", "partner"] },
+        "name": { "type": "string", "description": "Applicant full name", "maxLength": 120 },
+        "phone": { "type": "string", "description": "Applicant mobile phone number", "maxLength": 32 },
+        "pin": { "type": "string", "description": "Optional reference PIN", "maxLength": 12 },
+        "designationOrRole": { "type": "string", "description": "Staff designation or partner role", "maxLength": 120 },
+        "address": { "type": "string", "description": "Residential address", "maxLength": 300 },
+        "nid": { "type": "string", "description": "NID number", "maxLength": 64 },
+        "initialInvestment": { "type": "number", "description": "Optional initial investment amount for partner" },
+        "notes": { "type": "string", "description": "Optional notes", "maxLength": 500 },
+        "status": { "type": "string", "description": "pending, approved, or rejected", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 },
+        "reviewedAt": { "type": "string", "description": "ISO timestamp", "maxLength": 64 },
+        "reviewedBy": { "type": "string", "description": "Reviewer name", "maxLength": 120 }
+      },
+      "required": ["id", "uid", "role", "name", "phone", "status"]
+    },
+    "CustomerMember": {
+      "title": "CustomerMember",
+      "description": "ISP subscribers directory used for member number lookup and complaint auto-fill",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Customer document ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberId": { "type": "string", "description": "Customer Member ID / Connection Number", "maxLength": 80 },
+        "name": { "type": "string", "description": "Customer full name", "maxLength": 160 },
+        "phone": { "type": "string", "description": "Customer mobile number", "maxLength": 32 },
+        "address": { "type": "string", "description": "Customer address or area", "maxLength": 300 },
+        "packageName": { "type": "string", "description": "Internet package or speed", "maxLength": 120 },
+        "monthlyFee": { "type": "number", "description": "Monthly bill BDT" },
+        "oltInfo": { "type": "string", "description": "OLT/PON port or ONU info", "maxLength": 200 },
+        "oltPower": { "type": "string", "description": "ONU optical power and fiber distance", "maxLength": 120 },
+        "onuMac": { "type": "string", "description": "ONU MAC or serial number", "maxLength": 64 },
+        "fiberLength": { "type": "string", "description": "Optical fiber length or distance", "maxLength": 64 },
+        "rxPower": { "type": "string", "description": "ONU optical receive power in dBm", "maxLength": 64 },
+        "txPower": { "type": "string", "description": "ONU optical transmit power in dBm", "maxLength": 64 },
+        "pingLatency": { "type": "string", "description": "ONU ping latency in ms", "maxLength": 64 },
+        "downloadSpeed": { "type": "string", "description": "ONU live download rate", "maxLength": 64 },
+        "uploadSpeed": { "type": "string", "description": "ONU live upload rate", "maxLength": 64 },
+        "tjBox": { "type": "string", "description": "Termination/Joint (TJ) box identifier", "maxLength": 120 },
+        "tjLoss": { "type": "string", "description": "Optical loss measured at TJ box", "maxLength": 64 },
+        "splitterName": { "type": "string", "description": "Optical splitter identifier", "maxLength": 120 },
+        "splitterLoss": { "type": "string", "description": "Optical loss measured at splitter", "maxLength": 64 },
+        "lossStatus": { "type": "string", "description": "Optical loss classification", "enum": ["normal", "high_loss", "los", "dying_gasp", "splitter_fault", "tj_fault"] },
+        "issueReason": { "type": "string", "description": "Detailed optical or line problem diagnosis", "maxLength": 500 },
+        "status": { "type": "string", "description": "active, inactive, or disconnected", "enum": ["active", "inactive", "disconnected"] },
+        "statusLabel": { "type": "string", "description": "Original portal status label", "maxLength": 64 },
+        "expiryDate": { "type": "string", "description": "Billing or connection expiration date", "maxLength": 64 },
+        "dueAmount": { "type": "number", "description": "Customer due amount in BDT" },
+        "notes": { "type": "string", "description": "Additional notes", "maxLength": 1000 },
+        "addedBy": { "type": "string", "description": "User who added the customer", "maxLength": 120 },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp", "maxLength": 64 },
+        "updatedAt": { "type": "string", "description": "Update ISO timestamp", "maxLength": 64 }
+      },
+      "required": ["id", "memberId", "name", "phone", "address"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable audit trail entries for security and operational actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Audit Log ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "timestamp": { "type": "string", "description": "ISO timestamp", "maxLength": 64 },
+        "action": { "type": "string", "description": "Action identifier", "maxLength": 64 },
+        "actionBengali": { "type": "string", "description": "Action label in Bengali", "maxLength": 160 },
+        "performedBy": { "type": "string", "description": "Actor display name", "maxLength": 120 },
+        "performedById": { "type": "string", "description": "Actor ID or UID", "maxLength": 128 },
+        "performedByUid": { "type": "string", "description": "Firebase Auth UID", "maxLength": 128 },
+        "role": { "type": "string", "description": "Actor role", "maxLength": 32 },
+        "details": { "type": "string", "description": "Audit details", "maxLength": 1000 },
+        "metadata": { "type": "object", "description": "Optional metadata" }
+      },
+      "required": ["id", "timestamp", "action", "actionBengali", "performedBy", "performedById", "role", "details"]
+    },
+    "SharedReport": {
+      "title": "SharedReport",
+      "description": "Public capability-token snapshot of Daily/Monthly/Yearly financial statement for QR scan viewing and PDF download",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "High-entropy capability report ID (rpt-...)", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "companyName": { "type": "string", "description": "Company header name", "maxLength": 160 },
+        "companySubTitle": { "type": "string", "description": "Company subtitle", "maxLength": 240 },
+        "companyAddress": { "type": "string", "description": "Company address", "maxLength": 300 },
+        "companyPhone": { "type": "string", "description": "Company phone", "maxLength": 32 },
+        "companyEmail": { "type": "string", "description": "Company email", "maxLength": 160 },
+        "companyLogoUrl": { "type": "string", "description": "Company logo URL or path", "maxLength": 150000 },
+        "periodType": { "type": "string", "description": "daily, monthly, yearly, custom, or all", "enum": ["daily", "monthly", "yearly", "custom", "all"] },
+        "periodLabel": { "type": "string", "description": "Human-readable Bengali period label", "maxLength": 160 },
+        "verificationCode": { "type": "string", "description": "Official verification code", "maxLength": 64 },
+        "auditScore": { "type": "number", "description": "Statement audit completeness score" },
+        "generatedAt": { "type": "string", "description": "ISO timestamp when snapshot was generated", "maxLength": 64 },
+        "generatedBy": { "type": "string", "description": "Name of generator", "maxLength": 120 },
+        "summary": { "type": "object", "description": "Aggregated totals (totalIncome, totalExpense, netBalance, txCount, pendingDue)" },
+        "categorySummary": { "type": "array", "description": "Category breakdown entries" },
+        "multiMonthSummary": { "type": "array", "description": "Monthly breakdown entries for yearly/multi-month views" },
+        "transactions": { "type": "array", "description": "Sanitized non-PII financial ledger rows" },
+        "signatories": { "type": "object", "description": "Director, Manager, and Auditor signatory names and designations" }
+      },
+      "required": ["id", "companyName", "periodType", "periodLabel", "verificationCode", "generatedAt", "summary", "transactions"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Lightweight server connectivity probe document",
+      "type": "object",
+      "properties": {
+        "ok": { "type": "boolean", "description": "Health indicator" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "AppUser",
+      "description": "Google authenticated user profiles and Director-approved RBAC roles"
+    },
+    "/admins/{adminId}": {
+      "schema": "AdminMarker",
+      "description": "Admin/Director privilege markers"
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Company profile details"
+    },
+    "/partners/{partnerId}": {
+      "schema": "Partner",
+      "description": "Equity partners records"
+    },
+    "/staffs/{staffId}": {
+      "schema": "Staff",
+      "description": "Staff and technicians records"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Financial transaction ledger"
+    },
+    "/customerDues/{dueId}": {
+      "schema": "CustomerDue",
+      "description": "Customer receivables and dues"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Global settings, digital notices, release metadata, and admin auth (settings/auth restricted to admin)"
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Customer complaints and service tickets"
+    },
+    "/customers/{customerId}": {
+      "schema": "CustomerMember",
+      "description": "ISP subscribers directory for Member ID lookup and auto-fill"
+    },
+    "/joinRequests/{requestId}": {
+      "schema": "JoinRequest",
+      "description": "Staff and Share Partner joining requests"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable operational & security audit logs"
+    },
+    "/sharedReports/{reportId}": {
+      "schema": "SharedReport",
+      "description": "Public capability-token financial statement snapshots for QR code scan & PDF download (single-doc get with >=20 char ID, no list)"
+    },
+    "/test/{testId}": {
+      "schema": "ConnectionTest",
+      "description": "Read-only server reachability check (test/connection)"
+    }
+  }
+}

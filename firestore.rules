@@ -1,0 +1,785 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Default-Deny Catch-All (Pillar 1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Identity & Role Helper Functions
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token != null
+        && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedDirector() {
+      return isSignedIn()
+        && request.auth.token.email != null
+        && request.auth.token.email == 'zahidulislam53330@gmail.com';
+    }
+
+    function adminMarkerExists() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function userDocExists() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isApprovedUserDoc() {
+      return userDocExists() && userDoc().status == 'approved';
+    }
+
+    function isAdmin() {
+      return isBootstrappedDirector()
+        || adminMarkerExists()
+        || (isApprovedUserDoc() && userDoc().role in ['director', 'admin']);
+    }
+
+    function isApprovedUser() {
+      return isAdmin() || isApprovedUserDoc();
+    }
+
+    function isApprovedManager() {
+      return isApprovedUserDoc() && userDoc().role == 'manager';
+    }
+
+    function isApprovedStaff() {
+      return isApprovedUserDoc() && userDoc().role == 'staff';
+    }
+
+    function isApprovedPartner() {
+      return isApprovedUserDoc() && userDoc().role == 'partner';
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function affectedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // 3. Shared Primitive & String Size Validators (Pillar 5)
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOptString(data, field, maxLen) {
+      return !(field in data)
+        || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isReqString(data, field, minLen, maxLen) {
+      return (field in data)
+        && data[field] is string
+        && data[field].size() >= minLen
+        && data[field].size() <= maxLen;
+    }
+
+    function isOptNumber(data, field, minVal, maxVal) {
+      return !(field in data)
+        || (data[field] is number && data[field] >= minVal && data[field] <= maxVal);
+    }
+
+    function isOptBool(data, field) {
+      return !(field in data) || data[field] is bool;
+    }
+
+    function isOptTimestampOrString(data, field) {
+      return !(field in data)
+        || data[field] is timestamp
+        || (data[field] is string && data[field].size() <= 64);
+    }
+
+    function isOptStringList(data, field, maxItems) {
+      return !(field in data)
+        || (data[field] is list
+          && data[field].size() <= maxItems
+          && (data[field].size() == 0 || data[field][0] is string));
+    }
+
+    // 4. Collection Schema Validators
+    function isValidAppUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'phone', 'photoUrl',
+          'role', 'requestedRole', 'status', 'linkedStaffId', 'linkedPartnerId',
+          'approvedBy', 'approvedByUid', 'approvedAt', 'rejectionReason',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isReqString(data, 'email', 3, 160)
+        && isReqString(data, 'displayName', 1, 120)
+        && isOptString(data, 'phone', 32)
+        && isOptString(data, 'photoUrl', 1024)
+        && data.role in ['pending', 'director', 'admin', 'manager', 'staff', 'partner']
+        && (!( 'requestedRole' in data ) || data.requestedRole in ['staff', 'partner', 'manager', 'director'])
+        && data.status in ['pending', 'approved', 'rejected']
+        && isOptString(data, 'linkedStaffId', 128)
+        && isOptString(data, 'linkedPartnerId', 128)
+        && isOptString(data, 'approvedBy', 120)
+        && isOptString(data, 'approvedByUid', 128)
+        && isOptString(data, 'approvedAt', 64)
+        && isOptString(data, 'rejectionReason', 300)
+        && isOptTimestampOrString(data, 'createdAt')
+        && isOptTimestampOrString(data, 'updatedAt');
+    }
+
+    function isValidAdminMarker(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'grantedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'role', 'grantedAt', 'grantedBy'])
+        && isValidId(data.uid)
+        && isReqString(data, 'email', 3, 160)
+        && data.role in ['director', 'admin']
+        && isOptString(data, 'grantedBy', 128)
+        && isOptTimestampOrString(data, 'grantedAt');
+    }
+
+    function isValidCompany(data) {
+      return data.keys().hasAll(['name', 'ownerName'])
+        && data.keys().hasOnly([
+          'id', 'name', 'subTitle', 'ownerName', 'phone', 'email', 'address',
+          'logoUrl', 'currencySymbol', 'dailyExpenseThreshold', 'troubleshootPortalUrl',
+          'partners', 'updatedAt'
+        ])
+        && isOptString(data, 'id', 128)
+        && isReqString(data, 'name', 1, 160)
+        && isOptString(data, 'subTitle', 240)
+        && isReqString(data, 'ownerName', 1, 120)
+        && isOptString(data, 'phone', 32)
+        && isOptString(data, 'email', 160)
+        && isOptString(data, 'address', 300)
+        && isOptString(data, 'logoUrl', 200000)
+        && isOptString(data, 'currencySymbol', 12)
+        && isOptNumber(data, 'dailyExpenseThreshold', 0, 100000000)
+        && isOptString(data, 'troubleshootPortalUrl', 500)
+        && (!( 'partners' in data ) || (data.partners is list && data.partners.size() <= 100))
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidPartner(data) {
+      return data.keys().hasAll(['id', 'name', 'investment'])
+        && data.keys().hasOnly([
+          'id', 'name', 'phone', 'role', 'occupation', 'fatherName', 'motherName',
+          'address', 'permanentAddress', 'nidNumber', 'email',
+          'photoUrl', 'nidPhotoUrl', 'fatherNidPhotoUrl', 'motherNidPhotoUrl',
+          'joinedDate', 'investment', 'sharePercentage', 'investmentHistory',
+          'notes', 'pin', 'status', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'name', 1, 120)
+        && isOptString(data, 'phone', 32)
+        && isOptString(data, 'role', 120)
+        && isOptString(data, 'occupation', 120)
+        && isOptString(data, 'fatherName', 120)
+        && isOptString(data, 'motherName', 120)
+        && isOptString(data, 'address', 300)
+        && isOptString(data, 'permanentAddress', 300)
+        && isOptString(data, 'nidNumber', 64)
+        && isOptString(data, 'email', 160)
+        && isOptString(data, 'photoUrl', 450000)
+        && isOptString(data, 'nidPhotoUrl', 450000)
+        && isOptString(data, 'fatherNidPhotoUrl', 450000)
+        && isOptString(data, 'motherNidPhotoUrl', 450000)
+        && isOptString(data, 'joinedDate', 64)
+        && data.investment is number && data.investment >= 0 && data.investment <= 1000000000
+        && isOptNumber(data, 'sharePercentage', 0, 100)
+        && (!( 'investmentHistory' in data ) || (data.investmentHistory is list && data.investmentHistory.size() <= 500))
+        && isOptString(data, 'notes', 500)
+        && isOptString(data, 'pin', 12)
+        && (!( 'status' in data ) || data.status in ['active', 'inactive'])
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidStaff(data) {
+      return data.keys().hasAll(['id', 'name', 'salary'])
+        && data.keys().hasOnly([
+          'id', 'name', 'fatherName', 'motherName', 'phone', 'email', 'nid',
+          'address', 'permanentAddress', 'bloodGroup', 'education', 'emergencyContact',
+          'designation', 'salary', 'joinedAt', 'photoUrl', 'pin', 'status',
+          'allowedPortals', 'actionPermissions', 'assignedAreas', 'oltPonScopes', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'name', 1, 120)
+        && isOptString(data, 'fatherName', 120)
+        && isOptString(data, 'motherName', 120)
+        && isOptString(data, 'phone', 32)
+        && isOptString(data, 'email', 160)
+        && isOptString(data, 'nid', 64)
+        && isOptString(data, 'address', 300)
+        && isOptString(data, 'permanentAddress', 300)
+        && isOptString(data, 'bloodGroup', 16)
+        && isOptString(data, 'education', 120)
+        && isOptString(data, 'emergencyContact', 32)
+        && isOptString(data, 'designation', 120)
+        && data.salary is number && data.salary >= 0 && data.salary <= 10000000
+        && isOptString(data, 'joinedAt', 64)
+        && isOptString(data, 'photoUrl', 450000)
+        && isOptString(data, 'pin', 12)
+        && (!( 'status' in data ) || data.status in ['active', 'inactive'])
+        && isOptStringList(data, 'allowedPortals', 40)
+        && (!( 'actionPermissions' in data ) || data.actionPermissions is map)
+        && isOptStringList(data, 'assignedAreas', 100)
+        && isOptStringList(data, 'oltPonScopes', 40)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['id', 'type', 'date', 'title', 'amount'])
+        && data.keys().hasOnly([
+          'id', 'type', 'date', 'title', 'category', 'amount', 'paymentMethod',
+          'addedBy', 'addedById', 'addedByUid', 'note', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.type in ['income', 'expense']
+        && isReqString(data, 'date', 4, 32)
+        && isReqString(data, 'title', 1, 300)
+        && isOptString(data, 'category', 120)
+        && data.amount is number && data.amount >= 0 && data.amount <= 100000000
+        && isOptString(data, 'paymentMethod', 32)
+        && isOptString(data, 'addedBy', 120)
+        && isOptString(data, 'addedById', 128)
+        && isOptString(data, 'addedByUid', 128)
+        && isOptString(data, 'note', 1000)
+        && isOptString(data, 'createdAt', 64)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidCustomerDue(data) {
+      return data.keys().hasAll(['id', 'customerName', 'totalDue'])
+        && data.keys().hasOnly([
+          'id', 'customerName', 'phone', 'address', 'totalDue',
+          'paidAmount', 'currentDue', 'notes', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'customerName', 1, 160)
+        && isOptString(data, 'phone', 32)
+        && isOptString(data, 'address', 300)
+        && data.totalDue is number && data.totalDue >= 0 && data.totalDue <= 100000000
+        && isOptNumber(data, 'paidAmount', 0, 100000000)
+        && isOptNumber(data, 'currentDue', 0, 100000000)
+        && isOptString(data, 'notes', 1000)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidComplaint(data) {
+      return data.keys().hasAll(['id', 'name', 'idNumber', 'mobileNumber', 'address', 'complainDetails', 'status'])
+        && data.keys().hasOnly([
+          'id', 'name', 'idNumber', 'mobileNumber', 'address',
+          'packageName', 'oltInfo', 'oltPower', 'complainDetails',
+          'status', 'priority', 'assignedStaffId', 'assignedStaffName',
+          'autoAssignedReason', 'reportedBy', 'reportedById',
+          'resolutionNote', 'resolvedAt', 'date', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'name', 1, 160)
+        && isReqString(data, 'idNumber', 1, 80)
+        && isReqString(data, 'mobileNumber', 1, 32)
+        && isReqString(data, 'address', 1, 300)
+        && isOptString(data, 'packageName', 120)
+        && isOptString(data, 'oltInfo', 200)
+        && isOptString(data, 'oltPower', 120)
+        && isReqString(data, 'complainDetails', 1, 1500)
+        && data.status in ['pending', 'in_progress', 'resolved']
+        && (!( 'priority' in data ) || data.priority in ['normal', 'urgent', 'critical'])
+        && isOptString(data, 'assignedStaffId', 128)
+        && isOptString(data, 'assignedStaffName', 120)
+        && isOptString(data, 'autoAssignedReason', 300)
+        && isOptString(data, 'reportedBy', 120)
+        && isOptString(data, 'reportedById', 128)
+        && isOptString(data, 'resolutionNote', 1000)
+        && isOptString(data, 'resolvedAt', 64)
+        && isOptString(data, 'date', 32)
+        && isOptString(data, 'createdAt', 64)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidCustomerMember(data) {
+      return data.keys().hasAll(['id', 'memberId', 'name', 'phone', 'address'])
+        && data.keys().hasOnly([
+          'id', 'memberId', 'name', 'phone', 'address',
+          'packageName', 'monthlyFee', 'oltInfo', 'oltPower', 'onuMac',
+          'fiberLength', 'rxPower', 'txPower', 'pingLatency',
+          'downloadSpeed', 'uploadSpeed', 'tjBox', 'tjLoss',
+          'splitterName', 'splitterLoss', 'lossStatus', 'issueReason',
+          'status', 'statusLabel', 'expiryDate', 'dueAmount',
+          'notes', 'addedBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'memberId', 1, 80)
+        && isReqString(data, 'name', 1, 160)
+        && isReqString(data, 'phone', 1, 32)
+        && isReqString(data, 'address', 1, 300)
+        && isOptString(data, 'packageName', 120)
+        && isOptNumber(data, 'monthlyFee', 0, 1000000)
+        && isOptString(data, 'oltInfo', 200)
+        && isOptString(data, 'oltPower', 120)
+        && isOptString(data, 'onuMac', 64)
+        && isOptString(data, 'fiberLength', 64)
+        && isOptString(data, 'rxPower', 64)
+        && isOptString(data, 'txPower', 64)
+        && isOptString(data, 'pingLatency', 64)
+        && isOptString(data, 'downloadSpeed', 64)
+        && isOptString(data, 'uploadSpeed', 64)
+        && isOptString(data, 'tjBox', 120)
+        && isOptString(data, 'tjLoss', 64)
+        && isOptString(data, 'splitterName', 120)
+        && isOptString(data, 'splitterLoss', 64)
+        && (!( 'lossStatus' in data ) || data.lossStatus in ['normal', 'high_loss', 'los', 'dying_gasp', 'splitter_fault', 'tj_fault'])
+        && isOptString(data, 'issueReason', 500)
+        && (!( 'status' in data ) || data.status in ['active', 'inactive', 'disconnected'])
+        && isOptString(data, 'statusLabel', 64)
+        && isOptString(data, 'expiryDate', 64)
+        && isOptNumber(data, 'dueAmount', 0, 100000000)
+        && isOptString(data, 'notes', 1000)
+        && isOptString(data, 'addedBy', 120)
+        && isOptString(data, 'createdAt', 64)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidJoinRequest(data) {
+      return data.keys().hasAll(['id', 'uid', 'role', 'name', 'phone', 'status'])
+        && data.keys().hasOnly([
+          'id', 'uid', 'email', 'role', 'name', 'phone', 'pin',
+          'designationOrRole', 'address', 'nid', 'initialInvestment',
+          'notes', 'status', 'createdAt', 'reviewedAt', 'reviewedBy'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.uid)
+        && isOptString(data, 'email', 160)
+        && data.role in ['staff', 'partner']
+        && isReqString(data, 'name', 1, 120)
+        && isReqString(data, 'phone', 3, 32)
+        && isOptString(data, 'pin', 12)
+        && isOptString(data, 'designationOrRole', 120)
+        && isOptString(data, 'address', 300)
+        && isOptString(data, 'nid', 64)
+        && isOptNumber(data, 'initialInvestment', 0, 1000000000)
+        && isOptString(data, 'notes', 500)
+        && data.status in ['pending', 'approved', 'rejected']
+        && isOptString(data, 'createdAt', 64)
+        && isOptString(data, 'reviewedAt', 64)
+        && isOptString(data, 'reviewedBy', 120);
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'timestamp', 'action', 'actionBengali', 'performedBy', 'performedById', 'role', 'details'])
+        && data.keys().hasOnly([
+          'id', 'timestamp', 'action', 'actionBengali',
+          'performedBy', 'performedById', 'performedByUid',
+          'role', 'details', 'metadata'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'timestamp', 4, 64)
+        && isReqString(data, 'action', 2, 64)
+        && isReqString(data, 'actionBengali', 1, 160)
+        && isReqString(data, 'performedBy', 1, 120)
+        && isReqString(data, 'performedById', 1, 128)
+        && isOptString(data, 'performedByUid', 128)
+        && isReqString(data, 'role', 2, 32)
+        && isReqString(data, 'details', 1, 1000)
+        && (!( 'metadata' in data ) || data.metadata is map);
+    }
+
+    function isValidSharedReport(data) {
+      return data.keys().hasAll(['id', 'companyName', 'periodType', 'periodLabel', 'verificationCode', 'generatedAt', 'summary', 'transactions'])
+        && data.keys().hasOnly([
+          'id', 'companyName', 'companySubTitle', 'companyAddress', 'companyPhone',
+          'companyEmail', 'companyLogoUrl', 'periodType', 'periodLabel',
+          'verificationCode', 'auditScore', 'generatedAt', 'generatedBy',
+          'summary', 'categorySummary', 'multiMonthSummary', 'transactions', 'signatories'
+        ])
+        && isValidId(data.id)
+        && isReqString(data, 'companyName', 1, 160)
+        && isOptString(data, 'companySubTitle', 240)
+        && isOptString(data, 'companyAddress', 300)
+        && isOptString(data, 'companyPhone', 32)
+        && isOptString(data, 'companyEmail', 160)
+        && isOptString(data, 'companyLogoUrl', 200000)
+        && data.periodType in ['daily', 'monthly', 'yearly', 'custom', 'all']
+        && isReqString(data, 'periodLabel', 1, 160)
+        && isReqString(data, 'verificationCode', 2, 64)
+        && isOptNumber(data, 'auditScore', 0, 100)
+        && isReqString(data, 'generatedAt', 4, 64)
+        && isOptString(data, 'generatedBy', 120)
+        && data.summary is map
+        && (!( 'categorySummary' in data ) || (data.categorySummary is list && data.categorySummary.size() <= 100))
+        && (!( 'multiMonthSummary' in data ) || (data.multiMonthSummary is list && data.multiMonthSummary.size() <= 36))
+        && data.transactions is list && data.transactions.size() <= 600
+        && (!( 'signatories' in data ) || data.signatories is map);
+    }
+
+    function isValidAdminAuthSettings(data) {
+      return data.keys().hasOnly(['pin', 'phone', 'adminPin', 'adminPhone', 'updatedAt'])
+        && isOptString(data, 'pin', 12)
+        && isOptString(data, 'phone', 32)
+        && isOptString(data, 'adminPin', 12)
+        && isOptString(data, 'adminPhone', 32)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidDigitalNotice(data) {
+      return data.keys().hasOnly([
+          'text', 'subText', 'showClock', 'fontSize', 'color', 'mode', 'speed',
+          'customSpeedPxPerSec', 'pauseOnHover', 'showRow3Notifications',
+          'row3FontSize', 'row3Mode', 'row3SpeedPxPerSec', 'row3SlideIntervalSec',
+          'active', 'updatedAt', 'updatedBy'
+        ])
+        && isOptString(data, 'text', 1000)
+        && isOptString(data, 'subText', 1000)
+        && isOptBool(data, 'showClock')
+        && isOptString(data, 'fontSize', 24)
+        && isOptString(data, 'color', 24)
+        && isOptString(data, 'mode', 24)
+        && isOptString(data, 'speed', 24)
+        && isOptNumber(data, 'customSpeedPxPerSec', 1, 500)
+        && isOptBool(data, 'pauseOnHover')
+        && isOptBool(data, 'showRow3Notifications')
+        && isOptString(data, 'row3FontSize', 24)
+        && isOptString(data, 'row3Mode', 24)
+        && isOptNumber(data, 'row3SpeedPxPerSec', 1, 500)
+        && isOptNumber(data, 'row3SlideIntervalSec', 1, 120)
+        && isOptBool(data, 'active')
+        && isOptString(data, 'updatedAt', 64)
+        && isOptString(data, 'updatedBy', 120);
+    }
+
+    function isValidOfficersState(data) {
+      return data.keys().hasOnly(['manager', 'auditor', 'history', 'updatedAt'])
+        && (!( 'manager' in data ) || data.manager is map)
+        && (!( 'auditor' in data ) || data.auditor is map)
+        && (!( 'history' in data ) || (data.history is list && data.history.size() <= 100))
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidAppRelease(data) {
+      return data.keys().hasOnly(['version', 'buildId', 'buildTime', 'releaseNotes', 'publishedBy', 'forceAutoUpdate', 'updatedAt'])
+        && isOptString(data, 'version', 32)
+        && isOptString(data, 'buildId', 128)
+        && isOptString(data, 'buildTime', 64)
+        && isOptStringList(data, 'releaseNotes', 50)
+        && isOptString(data, 'publishedBy', 120)
+        && isOptBool(data, 'forceAutoUpdate')
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidWhatsAppGroup(data) {
+      return data.keys().hasOnly([
+          'groupName', 'groupInviteLink', 'staffGroupName', 'staffGroupInviteLink',
+          'partnerGroupName', 'partnerGroupInviteLink', 'smsAlertPhone',
+          'autoOpenWhatsAppOnSubmit', 'webhookUrl', 'updatedAt', 'updatedBy'
+        ])
+        && isOptString(data, 'groupName', 160)
+        && isOptString(data, 'groupInviteLink', 300)
+        && isOptString(data, 'staffGroupName', 160)
+        && isOptString(data, 'staffGroupInviteLink', 300)
+        && isOptString(data, 'partnerGroupName', 160)
+        && isOptString(data, 'partnerGroupInviteLink', 300)
+        && isOptString(data, 'smsAlertPhone', 32)
+        && isOptBool(data, 'autoOpenWhatsAppOnSubmit')
+        && isOptString(data, 'webhookUrl', 400)
+        && isOptString(data, 'updatedAt', 64)
+        && isOptString(data, 'updatedBy', 120);
+    }
+
+    function isValidNotificationControl(data) {
+      return data.keys().hasOnly(['clearedAt', 'clearedBy', 'clearedKeys', 'updatedAt'])
+        && isOptString(data, 'clearedAt', 64)
+        && isOptString(data, 'clearedBy', 120)
+        && isOptStringList(data, 'clearedKeys', 1000)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidTombstones(data) {
+      return data.keys().hasOnly([
+          'transactions', 'staffs', 'partners', 'customerDues',
+          'complaints', 'customers', 'joinRequests', 'updatedAt'
+        ])
+        && isOptStringList(data, 'transactions', 5000)
+        && isOptStringList(data, 'staffs', 1000)
+        && isOptStringList(data, 'partners', 500)
+        && isOptStringList(data, 'customerDues', 5000)
+        && isOptStringList(data, 'complaints', 5000)
+        && isOptStringList(data, 'customers', 5000)
+        && isOptStringList(data, 'joinRequests', 1000)
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidSeedMeta(data) {
+      return data.keys().hasOnly(['complaintsSeeded', 'transactionsSeeded', 'initialized', 'updatedAt'])
+        && isOptBool(data, 'complaintsSeeded')
+        && isOptBool(data, 'transactionsSeeded')
+        && isOptBool(data, 'initialized')
+        && isOptString(data, 'updatedAt', 64);
+    }
+
+    function isValidPortalControl(data) {
+      return data.keys().hasOnly([
+          'deletedPortalIds', 'disabledPortalIds', 'customPortals',
+          'portalOverrides', 'updatedAt', 'updatedBy'
+        ])
+        && isOptStringList(data, 'deletedPortalIds', 100)
+        && isOptStringList(data, 'disabledPortalIds', 100)
+        && (!( 'customPortals' in data ) || (data.customPortals is list && data.customPortals.size() <= 100))
+        && (!( 'portalOverrides' in data ) || data.portalOverrides is map)
+        && isOptString(data, 'updatedAt', 64)
+        && isOptString(data, 'updatedBy', 120);
+    }
+
+    // =========================================================================
+    // 5. Explicit Collection Rules
+    // =========================================================================
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidAppUser(incoming())
+        && incoming().uid == request.auth.uid
+        && (
+          (isBootstrappedDirector()
+            && incoming().role == 'director'
+            && incoming().status == 'approved')
+          || (incoming().role == 'pending'
+            && incoming().status == 'pending'
+            && !('approvedBy' in incoming())
+            && !('approvedByUid' in incoming())
+            && !('approvedAt' in incoming())
+            && !('linkedStaffId' in incoming())
+            && !('linkedPartnerId' in incoming()))
+        );
+
+      allow update: if isValidId(userId)
+        && isValidAppUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin()
+          || (isOwner(userId)
+            && incoming().email == existing().email
+            && incoming().role == existing().role
+            && incoming().status == existing().status
+            && affectedKeys().hasOnly(['displayName', 'phone', 'photoUrl', 'requestedRole', 'updatedAt']))
+        );
+
+      allow delete: if isValidId(userId) && isAdmin() && userId != request.auth.uid;
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(adminId)
+        && isValidAdminMarker(incoming())
+        && incoming().uid == adminId
+        && (
+          (isOwner(adminId) && isBootstrappedDirector() && incoming().role == 'director')
+          || (isAdmin() && incoming().role in ['director', 'admin'])
+        );
+
+      allow update: if isValidId(adminId)
+        && isAdmin()
+        && isValidAdminMarker(incoming())
+        && incoming().uid == existing().uid;
+
+      allow delete: if isValidId(adminId) && isAdmin() && adminId != request.auth.uid;
+    }
+
+    match /companies/{companyId} {
+      allow get: if isValidId(companyId) && isApprovedUser();
+      allow list: if isApprovedUser();
+      allow create: if isValidId(companyId) && (isAdmin() || isApprovedManager()) && isValidCompany(incoming());
+      allow update: if isValidId(companyId) && (isAdmin() || isApprovedManager()) && isValidCompany(incoming());
+      allow delete: if isValidId(companyId) && isAdmin();
+    }
+
+    match /partners/{partnerId} {
+      allow get: if isValidId(partnerId) && (isAdmin() || isApprovedManager() || isApprovedPartner());
+      allow list: if isAdmin() || isApprovedManager() || isApprovedPartner();
+      allow create: if isValidId(partnerId) && (isAdmin() || isApprovedManager()) && isValidPartner(incoming()) && incoming().id == partnerId;
+      allow update: if isValidId(partnerId) && (isAdmin() || isApprovedManager()) && isValidPartner(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(partnerId) && isAdmin();
+    }
+
+    match /staffs/{staffId} {
+      allow get: if isValidId(staffId) && (isAdmin() || isApprovedManager() || isApprovedStaff());
+      allow list: if isAdmin() || isApprovedManager() || isApprovedStaff();
+      allow create: if isValidId(staffId) && (isAdmin() || isApprovedManager()) && isValidStaff(incoming()) && incoming().id == staffId;
+      allow update: if isValidId(staffId) && (isAdmin() || isApprovedManager()) && isValidStaff(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(staffId) && isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isApprovedUser();
+      allow list: if isApprovedUser();
+      allow create: if isValidId(transactionId)
+        && (isAdmin() || isApprovedManager() || isApprovedStaff())
+        && isValidTransaction(incoming())
+        && incoming().id == transactionId
+        && (isAdmin() || !('addedByUid' in incoming()) || incoming().addedByUid == request.auth.uid);
+      allow update: if isValidId(transactionId)
+        && isValidTransaction(incoming())
+        && incoming().id == existing().id
+        && (!('addedByUid' in existing()) || incoming().addedByUid == existing().addedByUid)
+        && (
+          isAdmin()
+          || isApprovedManager()
+          || (isApprovedStaff() && (!('addedByUid' in existing()) || existing().addedByUid == request.auth.uid))
+        );
+      allow delete: if isValidId(transactionId) && (isAdmin() || isApprovedManager());
+    }
+
+    match /customerDues/{dueId} {
+      allow get: if isValidId(dueId) && (isAdmin() || isApprovedManager() || isApprovedStaff());
+      allow list: if isAdmin() || isApprovedManager() || isApprovedStaff();
+      allow create: if isValidId(dueId) && (isAdmin() || isApprovedManager() || isApprovedStaff()) && isValidCustomerDue(incoming()) && incoming().id == dueId;
+      allow update: if isValidId(dueId)
+        && isValidCustomerDue(incoming())
+        && incoming().id == existing().id
+        && (
+          isAdmin()
+          || isApprovedManager()
+          || (isApprovedStaff() && affectedKeys().hasOnly(['paidAmount', 'currentDue', 'notes', 'updatedAt']))
+        );
+      allow delete: if isValidId(dueId) && (isAdmin() || isApprovedManager());
+    }
+
+    match /complaints/{complaintId} {
+      allow get: if isValidId(complaintId) && (isAdmin() || isApprovedManager() || isApprovedStaff());
+      allow list: if isAdmin() || isApprovedManager() || isApprovedStaff();
+      allow create: if isValidId(complaintId) && (isAdmin() || isApprovedManager() || isApprovedStaff()) && isValidComplaint(incoming()) && incoming().id == complaintId;
+      allow update: if isValidId(complaintId)
+        && isValidComplaint(incoming())
+        && incoming().id == existing().id
+        && (
+          isAdmin()
+          || isApprovedManager()
+          || (isApprovedStaff() && affectedKeys().hasOnly(['status', 'resolutionNote', 'resolvedAt', 'updatedAt']))
+        );
+      allow delete: if isValidId(complaintId) && (isAdmin() || isApprovedManager());
+    }
+
+    match /customers/{customerId} {
+      allow get: if isValidId(customerId) && (isAdmin() || isApprovedManager() || isApprovedStaff());
+      allow list: if isAdmin() || isApprovedManager() || isApprovedStaff();
+      allow create: if isValidId(customerId) && (isAdmin() || isApprovedManager() || isApprovedStaff()) && isValidCustomerMember(incoming()) && incoming().id == customerId;
+      allow update: if isValidId(customerId) && (isAdmin() || isApprovedManager() || isApprovedStaff()) && isValidCustomerMember(incoming()) && incoming().id == existing().id;
+      allow delete: if isValidId(customerId) && (isAdmin() || isApprovedManager());
+    }
+
+    match /joinRequests/{requestId} {
+      allow get: if isValidId(requestId)
+        && (isAdmin() || isApprovedManager() || (isSignedIn() && existing().uid == request.auth.uid));
+      allow list: if isAdmin()
+        || isApprovedManager()
+        || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isValidId(requestId)
+        && isSignedIn()
+        && isValidJoinRequest(incoming())
+        && incoming().id == requestId
+        && incoming().uid == request.auth.uid
+        && incoming().status == 'pending';
+      allow update: if isValidId(requestId)
+        && (isAdmin() || isApprovedManager())
+        && isValidJoinRequest(incoming())
+        && incoming().id == existing().id
+        && incoming().uid == existing().uid;
+      allow delete: if isValidId(requestId) && (isAdmin() || isApprovedManager());
+    }
+
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId)
+        && isApprovedUser()
+        && isValidAuditLog(incoming())
+        && incoming().id == logId;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId) && (
+        (settingId == 'auth' && isAdmin())
+        || (settingId in [
+            'digital_notice', 'appointed_officers', 'app_release',
+            'whatsapp_group', 'notification_control', 'deleted_tombstones',
+            'seed_meta', 'portal_control'
+          ] && isApprovedUser())
+      );
+
+      allow list: if isAdmin();
+
+      allow create: if isValidId(settingId) && (
+        (settingId == 'auth' && isAdmin() && isValidAdminAuthSettings(incoming()))
+        || (settingId == 'digital_notice' && (isAdmin() || isApprovedManager()) && isValidDigitalNotice(incoming()))
+        || (settingId == 'appointed_officers' && (isAdmin() || isApprovedManager()) && isValidOfficersState(incoming()))
+        || (settingId == 'app_release' && isAdmin() && isValidAppRelease(incoming()))
+        || (settingId == 'whatsapp_group' && (isAdmin() || isApprovedManager()) && isValidWhatsAppGroup(incoming()))
+        || (settingId == 'notification_control' && isAdmin() && isValidNotificationControl(incoming()))
+        || (settingId == 'deleted_tombstones' && (isAdmin() || isApprovedManager() || isApprovedStaff()) && isValidTombstones(incoming()))
+        || (settingId == 'seed_meta' && isAdmin() && isValidSeedMeta(incoming()))
+        || (settingId == 'portal_control' && (isAdmin() || isApprovedManager()) && isValidPortalControl(incoming()))
+      );
+
+      allow update: if isValidId(settingId) && (
+        (settingId == 'auth' && isAdmin() && isValidAdminAuthSettings(incoming()))
+        || (settingId == 'digital_notice' && (isAdmin() || isApprovedManager()) && isValidDigitalNotice(incoming()))
+        || (settingId == 'appointed_officers' && (isAdmin() || isApprovedManager()) && isValidOfficersState(incoming()))
+        || (settingId == 'app_release' && isAdmin() && isValidAppRelease(incoming()))
+        || (settingId == 'whatsapp_group' && (isAdmin() || isApprovedManager()) && isValidWhatsAppGroup(incoming()))
+        || (settingId == 'notification_control' && isAdmin() && isValidNotificationControl(incoming()))
+        || (settingId == 'deleted_tombstones' && (isAdmin() || isApprovedManager() || isApprovedStaff()) && isValidTombstones(incoming()))
+        || (settingId == 'seed_meta' && isAdmin() && isValidSeedMeta(incoming()))
+        || (settingId == 'portal_control' && (isAdmin() || isApprovedManager()) && isValidPortalControl(incoming()))
+      );
+
+      allow delete: if isValidId(settingId) && isAdmin() && settingId != 'auth';
+    }
+
+    // Capability-token public financial statement snapshots (for QR scan viewing & PDF download)
+    match /sharedReports/{reportId} {
+      allow get: if isValidId(reportId) && reportId.size() >= 20;
+      allow list: if false;
+      allow create: if isValidId(reportId)
+        && reportId.size() >= 20
+        && (isAdmin() || isApprovedManager() || isApprovedStaff())
+        && isValidSharedReport(incoming())
+        && incoming().id == reportId;
+      allow update: if isValidId(reportId)
+        && reportId.size() >= 20
+        && (isAdmin() || isApprovedManager() || isApprovedStaff())
+        && isValidSharedReport(incoming())
+        && incoming().id == existing().id;
+      allow delete: if isValidId(reportId) && isAdmin();
+    }
+
+    match /test/{testId} {
+      allow get: if testId == 'connection';
+      allow list, write: if false;
+    }
+  }
+}
