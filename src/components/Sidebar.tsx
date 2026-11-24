@@ -47,7 +47,7 @@ import {
 import { prefetchPortalModule } from '../utils/modulePrefetch';
 import { getEffectiveTroubleshootPortalUrl } from '../utils/appUrls';
 import { AppFontSize, getSavedAppFontSize, subscribeAppFontSize } from '../utils/fontScale';
-import { renderCustomPortalIcon } from './PortalControlModal';
+import { renderCustomPortalIcon } from '../utils/portalIcons';
 
 interface SidebarProps {
   activeTab: string;

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import crypto from 'crypto';
 import express from 'express';
 import fs from 'fs';
+import http from 'http';
 import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,7 +27,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
-const isProd = process.env.NODE_ENV === 'production';
+const DIST_PATH = path.resolve(__dirname, 'dist');
+const DIST_INDEX_PATH = path.join(DIST_PATH, 'index.html');
+const IS_DEV_SCRIPT =
+  process.env.npm_lifecycle_event === 'dev' ||
+  process.argv.some((arg) => arg.includes('tsx')) ||
+  process.execArgv.some((arg) => arg.includes('tsx'));
+const isProd =
+  process.env.NODE_ENV === 'production' ||
+  process.env.npm_lifecycle_event === 'start' ||
+  (!IS_DEV_SCRIPT && fs.existsSync(DIST_INDEX_PATH));
 
 function getGeminiClient(): GoogleGenAI | null {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -87,6 +97,7 @@ function isBlockedHealthCheckHost(rawHostname: string): boolean {
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   app.set('trust proxy', true);
   app.use(express.json({ limit: '2mb' }));
 
@@ -534,13 +545,30 @@ async function startServer() {
   });
 
   if (!isProd) {
+    // In dev mode VitePWA registers /dev-sw.js?dev-sw; ensure /sw.js never returns text/html
+    app.get('/sw.js', (_req, res) => {
+      const distSw = path.join(DIST_PATH, 'sw.js');
+      if (fs.existsSync(distSw)) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.sendFile(distSw);
+        return;
+      }
+      res.status(404).type('application/javascript').send('// dev-sw active');
+    });
+
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        allowedHosts: true,
+        ws: {
+          server: httpServer
+        }
+      },
       appType: 'spa'
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
     app.use((req, res, next) => {
       if (
         req.headers.origin &&
@@ -558,7 +586,7 @@ async function startServer() {
       next();
     });
     app.use(
-      express.static(distPath, {
+      express.static(DIST_PATH, {
         setHeaders: (res, filePath) => {
           if (
             filePath.endsWith('index.html') ||
@@ -570,24 +598,35 @@ async function startServer() {
           ) {
             res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
           }
+          if (filePath.endsWith('sw.js') || filePath.endsWith('registerSW.js')) {
+            res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+            res.setHeader('Service-Worker-Allowed', '/');
+          }
           if (filePath.endsWith('manifest.json') || filePath.endsWith('manifest.webmanifest')) {
             res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
           }
         }
       })
     );
-    app.get('*', (_req, res) => {
-      const indexFile = path.join(distPath, 'index.html');
-      if (fs.existsSync(indexFile)) {
+    app.get('*', (req, res) => {
+      // Never serve index.html for missing JS/CSS/manifest/SW/icon assets
+      if (
+        req.path.startsWith('/api/') ||
+        /\.(?:js|mjs|css|map|json|webmanifest|png|jpg|jpeg|svg|ico|woff|woff2)$/i.test(req.path)
+      ) {
+        res.status(404).end();
+        return;
+      }
+      if (fs.existsSync(DIST_INDEX_PATH)) {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-        res.sendFile(indexFile);
+        res.sendFile(DIST_INDEX_PATH);
       } else {
-        res.status(404).send('Build output not found.');
+        res.status(503).send('Build output not found.');
       }
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`DIP BHOLA NETWORK server running on http://0.0.0.0:${PORT}`);
   });
 }

@@ -9,7 +9,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { CustomPortalLink } from '../types';
-import { renderCustomPortalIcon } from './PortalControlModal';
+import { renderCustomPortalIcon } from '../utils/portalIcons';
 
 interface CustomPortalViewProps {
   portal: CustomPortalLink;

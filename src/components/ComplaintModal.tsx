@@ -45,7 +45,10 @@ import {
 } from '../utils/formatters';
 
 import { getEffectiveTroubleshootPortalUrl } from '../utils/appUrls';
-import { autoAssignTechnicianByLocation } from '../utils/complaintAutoAssign';
+import {
+  autoAssignTechnicianByLocation,
+  suggestBestTechnicianByLocationHistory
+} from '../utils/complaintAutoAssign';
 
 interface ComplaintModalProps {
   isOpen: boolean;
@@ -282,6 +285,17 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
     if (!isOpen || staffs.length === 0) return null;
     if (!address.trim() && !oltInfo.trim()) return null;
     return autoAssignTechnicianByLocation({
+      address,
+      oltInfo,
+      staffs,
+      complaints,
+    });
+  }, [isOpen, address, oltInfo, staffs, complaints]);
+
+  const historySuggestion = useMemo(() => {
+    if (!isOpen || staffs.length === 0) return null;
+    if (!address.trim() && !oltInfo.trim()) return null;
+    return suggestBestTechnicianByLocationHistory({
       address,
       oltInfo,
       staffs,
@@ -1227,6 +1241,27 @@ export const ComplaintModal: React.FC<ComplaintModalProps> = ({
                     <div className="mt-1.5 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1">
                       <UserCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                       <span className="truncate">{autoAssignResult.reasonBengali}</span>
+                    </div>
+                  )}
+                  {historySuggestion?.hasLocationHistory && historySuggestion.suggestedStaff && (
+                    <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold text-indigo-900 dark:text-indigo-200 flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        ⭐ সেরা প্রস্তাব: {historySuggestion.suggestedStaff.name} ({historySuggestion.resolvedCountInLocation}/{historySuggestion.totalCountInLocation} সমাধান, {historySuggestion.successRatePct}%)
+                      </span>
+                      {assignedStaffId !== historySuggestion.suggestedStaff.id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (historySuggestion.suggestedStaff) {
+                              setIsManualStaffOverride(true);
+                              setAssignedStaffId(historySuggestion.suggestedStaff.id);
+                            }
+                          }}
+                          className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-black shrink-0 cursor-pointer"
+                        >
+                          বাছাই করুন
+                        </button>
+                      )}
                     </div>
                   )}
                   {staffs.length > 0 && (

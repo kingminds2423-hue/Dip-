@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
-import { Smartphone, Maximize, X } from 'lucide-react';
+import { Smartphone, Maximize, X, ExternalLink } from 'lucide-react';
+import { PUBLISHED_SHARED_URL } from '../utils/appUrls';
 
 export const MobileInstallNotice: React.FC = () => {
   const { isInstalled, isInstallable, isAndroid, isIOS, install } = usePWAInstall();
   const [isDismissed, setIsDismissed] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const isDevPreviewHost =
+    typeof window !== 'undefined' && window.location.hostname.includes('ais-dev-');
 
   // If already running as standalone app or user dismissed for this session
   if (isInstalled || isDismissed) {
@@ -86,9 +89,22 @@ export const MobileInstallNotice: React.FC = () => {
                 ইনস্টল করলে মোবাইলের ওপরের <strong>ওয়েবসাইট লিঙ্ক (...run.app)</strong> ও <strong>[X] বাটন</strong> আর দেখাবে না এবং লোকাল ক্যাশ থেকে সাথে সাথে খুলবে।
               </p>
 
-              <p className="bg-amber-50 text-amber-900 p-2.5 rounded-xl border border-amber-200 leading-relaxed">
-                <strong>দ্রুত চালু টিপস:</strong> দীর্ঘসময় পর ঢুকতে চাইলে ডেভেলপার প্রিভিউ (ais-dev) লিঙ্কের বদলে সবসময় <strong>Published / Shared অ্যাপ লিঙ্ক (ais-pre)</strong> থেকে ইনস্টল ব্যবহার করুন—তাহলে ঘণ্টার পর ঘণ্টা অপেক্ষা করতে হবে না।
-              </p>
+              <div className="bg-amber-50 text-amber-900 p-2.5 rounded-xl border border-amber-200 leading-relaxed space-y-2">
+                <div>
+                  <strong>দ্রুত চালু টিপস:</strong> দীর্ঘসময় পর ঢুকতে চাইলে ডেভেলপার প্রিভিউ (ais-dev) লিঙ্কের বদলে সবসময় <strong>Published / Shared অ্যাপ লিঙ্ক (ais-pre)</strong> থেকে ইনস্টল ব্যবহার করুন—তাহলে "Please wait while your application starts" সমস্যা হবে না।
+                </div>
+                {isDevPreviewHost && (
+                  <a
+                    href={`${PUBLISHED_SHARED_URL}/?portal=playstore`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Shared লিংক খুলুন</span>
+                  </a>
+                )}
+              </div>
 
               <div className="space-y-1.5">
                 <p className="font-bold text-slate-900">ইনস্টল করার সহজ নিয়ম:</p>

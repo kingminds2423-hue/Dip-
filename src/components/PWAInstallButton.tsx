@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { Download, Smartphone, X, CheckCircle2, Maximize, ExternalLink } from 'lucide-react';
+import { PUBLISHED_SHARED_URL } from '../utils/appUrls';
 
 export const PWAInstallButton: React.FC = () => {
   const { isInstallable, isInstalled, isIOS, isAndroid, install } = usePWAInstall();
   const [showGuide, setShowGuide] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
+  const isDevPreviewHost =
+    typeof window !== 'undefined' && window.location.hostname.includes('ais-dev-');
 
   // Toggle fullscreen mode immediately to hide browser address bar
   const handleToggleFullscreen = () => {
@@ -91,6 +94,26 @@ export const PWAInstallButton: React.FC = () => {
                   <strong>কেন ইনস্টল করবেন?</strong> ইনস্টল করলে হোমস্ক্রিনে এই Dip Bhola Network অ্যাপ লোগোসহ যুক্ত হবে এবং ব্রাউজার বার ছাড়াই ফুলস্ক্রিন চলবে।
                 </div>
               </div>
+
+              {isDevPreviewHost && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 text-xs space-y-2">
+                  <div className="font-bold">
+                    ⚠️ ডেভেলপার প্রিভিউ লিংক শনাক্ত হয়েছে!
+                  </div>
+                  <p className="leading-relaxed">
+                    এই লিংক থেকে অ্যাপ ইনস্টল করলে পরে চালু হওয়ার সময় "Please wait while your application starts" পেজে আটকে যেতে পারে। তাই নিচের অফিশিয়াল Shared লিংক খুলে সেখান থেকে Install করুন:
+                  </p>
+                  <a
+                    href={`${PUBLISHED_SHARED_URL}/?portal=playstore`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Shared লিংক থেকে ইনস্টল করুন</span>
+                  </a>
+                </div>
+              )}
 
               {isIOS ? (
                 <div className="space-y-2 text-slate-700">

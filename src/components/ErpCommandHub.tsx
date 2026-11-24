@@ -61,7 +61,7 @@ import {
   TransactionType,
   UserSession
 } from '../types';
-import { renderCustomPortalIcon } from './PortalControlModal';
+import { renderCustomPortalIcon } from '../utils/portalIcons';
 import {
   formatCurrency,
   getTodayString,

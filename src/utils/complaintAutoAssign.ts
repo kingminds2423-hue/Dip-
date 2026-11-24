@@ -296,3 +296,337 @@ export function autoAssignTechnicianByLocation(params: {
     reasonBengali,
   };
 }
+
+export interface TechnicianHistorySuggestionCandidate {
+  staff: Staff;
+  score: number;
+  resolvedCountInLocation: number;
+  totalCountInLocation: number;
+  successRatePct: number;
+  recentResolvedCount: number;
+  lastResolvedAt: string | null;
+  openTicketCount: number;
+  overallResolvedCount: number;
+  isTechnician: boolean;
+}
+
+export interface TechnicianHistorySuggestionResult {
+  suggestedStaff: Staff | null;
+  confidence: 'high' | 'medium' | 'low' | 'none';
+  hasLocationHistory: boolean;
+  locationLabel: string | null;
+  ponPort: string | null;
+  totalLocationComplaints: number;
+  resolvedCountInLocation: number;
+  totalCountInLocation: number;
+  successRatePct: number;
+  openTicketCount: number;
+  reasonBengali: string;
+  rankedCandidates: TechnicianHistorySuggestionCandidate[];
+}
+
+function getComplaintTimestampMs(c: CustomerComplaint): number {
+  const raw = c.resolvedAt || c.updatedAt || c.createdAt || c.date || '';
+  const ts = Date.parse(raw);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function extractAreaClusters(textNorm: string): string[] {
+  if (!textNorm) return [];
+  const matched: string[] = [];
+  for (const cluster of AREA_SYNONYM_CLUSTERS) {
+    if (cluster.some((syn) => textNorm.includes(normalizeAreaText(syn)))) {
+      matched.push(cluster[0]);
+    }
+  }
+  return matched;
+}
+
+function extractMeaningfulLocationTokens(textNorm: string): string[] {
+  if (!textNorm) return [];
+  return Array.from(
+    new Set(
+      textNorm
+        .split(' ')
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 3 && !STOP_WORDS.has(t) && !/^\d+$/.test(t))
+    )
+  );
+}
+
+/**
+ * Suggests the best-suited active technician for a customer complaint based on
+ * their previous successful (resolved) service history in that specific location.
+ */
+export function suggestBestTechnicianByLocationHistory(params: {
+  address?: string;
+  oltInfo?: string;
+  staffs: Staff[];
+  complaints: CustomerComplaint[];
+}): TechnicianHistorySuggestionResult {
+  const { address = '', oltInfo = '', staffs, complaints = [] } = params;
+
+  const activeStaffs = staffs.filter((s) => s.status !== 'inactive');
+  const trimmedAddress = address.trim();
+  const trimmedOlt = oltInfo.trim();
+
+  if (activeStaffs.length === 0 || (!trimmedAddress && !trimmedOlt)) {
+    return {
+      suggestedStaff: null,
+      confidence: 'none',
+      hasLocationHistory: false,
+      locationLabel: trimmedAddress || trimmedOlt || null,
+      ponPort: null,
+      totalLocationComplaints: 0,
+      resolvedCountInLocation: 0,
+      totalCountInLocation: 0,
+      successRatePct: 0,
+      openTicketCount: 0,
+      reasonBengali:
+        activeStaffs.length === 0
+          ? 'সক্রিয় কোনো টেকনিশিয়ান পাওয়া যায়নি'
+          : 'লোকেশন ইতিহাস যাচাইয়ের জন্য ঠিকানা বা OLT তথ্য দিন',
+      rankedCandidates: [],
+    };
+  }
+
+  const targetTextNorm = normalizeAreaText(`${trimmedAddress} ${trimmedOlt}`);
+  const targetClusters = extractAreaClusters(targetTextNorm);
+  const specificTargetClusters = targetClusters.filter((c) => c !== 'ভোলা সদর');
+  const targetTokens = extractMeaningfulLocationTokens(normalizeAreaText(trimmedAddress));
+  const detectedTargetPon = trimmedOlt ? detectPonPort(trimmedOlt).ponPort : 'OTHER';
+  const targetPonPort = detectedTargetPon !== 'OTHER' ? detectedTargetPon : null;
+
+  const locationLabel =
+    specificTargetClusters[0] ||
+    targetTokens.slice(0, 2).join(' ') ||
+    targetClusters[0] ||
+    trimmedAddress ||
+    targetPonPort ||
+    null;
+
+  // Determine how strongly a historical complaint belongs to the target complaint location
+  const computeLocationSimilarity = (complaint: CustomerComplaint): number => {
+    const cAddrNorm = normalizeAreaText(complaint.address || '');
+    const cFullNorm = normalizeAreaText(`${complaint.address || ''} ${complaint.oltInfo || ''}`);
+    if (!cFullNorm) return 0;
+
+    if (specificTargetClusters.length > 0) {
+      const cClusters = extractAreaClusters(cFullNorm);
+      if (specificTargetClusters.some((tc) => cClusters.includes(tc))) {
+        return 1.0;
+      }
+    }
+
+    const addressOnlyNorm = normalizeAreaText(trimmedAddress);
+    if (
+      addressOnlyNorm.length >= 4 &&
+      cAddrNorm.length >= 4 &&
+      (cAddrNorm.includes(addressOnlyNorm) || addressOnlyNorm.includes(cAddrNorm))
+    ) {
+      return 0.95;
+    }
+
+    if (targetTokens.length > 0) {
+      const cTokens = extractMeaningfulLocationTokens(cFullNorm);
+      const overlapCount = targetTokens.filter(
+        (tok) => cTokens.includes(tok) || cFullNorm.includes(tok)
+      ).length;
+      if (overlapCount >= 2) return 0.9;
+      if (overlapCount === 1) return 0.75;
+    }
+
+    if (targetPonPort && complaint.oltInfo) {
+      const cPon = detectPonPort(complaint.oltInfo).ponPort;
+      if (cPon === targetPonPort) return 0.7;
+    }
+
+    if (specificTargetClusters.length === 0 && targetClusters.includes('ভোলা সদর')) {
+      const cClusters = extractAreaClusters(cFullNorm);
+      if (cClusters.includes('ভোলা সদর')) return 0.45;
+    }
+
+    return 0;
+  };
+
+  const nowMs = Date.now();
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+  // Map normalized staff name -> id for historical records missing assignedStaffId
+  const staffByName = new Map<string, string>();
+  for (const s of activeStaffs) {
+    const normName = normalizeAreaText(s.name);
+    if (normName && !staffByName.has(normName)) {
+      staffByName.set(normName, s.id);
+    }
+  }
+
+  const resolveStaffIdForComplaint = (c: CustomerComplaint): string | null => {
+    if (c.assignedStaffId && activeStaffs.some((s) => s.id === c.assignedStaffId)) {
+      return c.assignedStaffId;
+    }
+    if (c.assignedStaffName) {
+      const byName = staffByName.get(normalizeAreaText(c.assignedStaffName));
+      if (byName) return byName;
+    }
+    return null;
+  };
+
+  const openLoadMap = new Map<string, number>();
+  const overallResolvedMap = new Map<string, number>();
+
+  interface TechLocationStats {
+    resolvedCount: number;
+    weightedResolved: number;
+    totalCount: number;
+    recentResolvedCount: number;
+    lastResolvedMs: number;
+    lastResolvedIso: string | null;
+  }
+
+  const locationStatsMap = new Map<string, TechLocationStats>();
+  let totalLocationComplaints = 0;
+
+  for (const c of complaints) {
+    const staffId = resolveStaffIdForComplaint(c);
+    if (staffId) {
+      if (c.status === 'resolved') {
+        overallResolvedMap.set(staffId, (overallResolvedMap.get(staffId) || 0) + 1);
+      } else {
+        openLoadMap.set(staffId, (openLoadMap.get(staffId) || 0) + 1);
+      }
+    }
+
+    const locWeight = computeLocationSimilarity(c);
+    if (locWeight <= 0) continue;
+    totalLocationComplaints += 1;
+
+    if (!staffId) continue;
+
+    const current = locationStatsMap.get(staffId) || {
+      resolvedCount: 0,
+      weightedResolved: 0,
+      totalCount: 0,
+      recentResolvedCount: 0,
+      lastResolvedMs: 0,
+      lastResolvedIso: null,
+    };
+
+    current.totalCount += 1;
+
+    if (c.status === 'resolved') {
+      current.resolvedCount += 1;
+      current.weightedResolved += locWeight;
+      const tsMs = getComplaintTimestampMs(c);
+      if (tsMs > current.lastResolvedMs) {
+        current.lastResolvedMs = tsMs;
+        current.lastResolvedIso = c.resolvedAt || c.updatedAt || c.createdAt || c.date || null;
+      }
+      if (tsMs > 0 && nowMs - tsMs <= THIRTY_DAYS_MS) {
+        current.recentResolvedCount += 1;
+      }
+    }
+
+    locationStatsMap.set(staffId, current);
+  }
+
+  const rankedCandidates: TechnicianHistorySuggestionCandidate[] = activeStaffs.map((staff) => {
+    const stats = locationStatsMap.get(staff.id) || {
+      resolvedCount: 0,
+      weightedResolved: 0,
+      totalCount: 0,
+      recentResolvedCount: 0,
+      lastResolvedMs: 0,
+      lastResolvedIso: null,
+    };
+    const openTicketCount = openLoadMap.get(staff.id) || 0;
+    const overallResolvedCount = overallResolvedMap.get(staff.id) || 0;
+    const isTechnician = isTechnicianRole(staff.designation);
+    const successRatePct =
+      stats.totalCount > 0 ? Math.round((stats.resolvedCount / stats.totalCount) * 100) : 0;
+
+    let score = isTechnician ? 8 : 0;
+    if (stats.resolvedCount > 0) {
+      score += Math.round(stats.weightedResolved * 40);
+      score += Math.round((successRatePct / 100) * 25);
+      score += Math.min(30, stats.recentResolvedCount * 10);
+    }
+    score += Math.min(12, overallResolvedCount * 2);
+    score -= openTicketCount * 5;
+
+    return {
+      staff,
+      score,
+      resolvedCountInLocation: stats.resolvedCount,
+      totalCountInLocation: stats.totalCount,
+      successRatePct,
+      recentResolvedCount: stats.recentResolvedCount,
+      lastResolvedAt: stats.lastResolvedIso,
+      openTicketCount,
+      overallResolvedCount,
+      isTechnician,
+    };
+  });
+
+  rankedCandidates.sort((a, b) => {
+    if (b.resolvedCountInLocation !== a.resolvedCountInLocation) {
+      // Strongly prefer technicians who actually resolved tickets in this location
+      if (a.resolvedCountInLocation === 0 || b.resolvedCountInLocation === 0) {
+        return b.resolvedCountInLocation - a.resolvedCountInLocation;
+      }
+    }
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.successRatePct !== a.successRatePct) return b.successRatePct - a.successRatePct;
+    if (a.openTicketCount !== b.openTicketCount) return a.openTicketCount - b.openTicketCount;
+    if (a.isTechnician !== b.isTechnician) return a.isTechnician ? -1 : 1;
+    return (a.staff.name || '').localeCompare(b.staff.name || '');
+  });
+
+  const best = rankedCandidates[0];
+  const hasLocationHistory = Boolean(best && best.resolvedCountInLocation > 0);
+
+  if (!hasLocationHistory) {
+    const areaFallback = autoAssignTechnicianByLocation({
+      address: trimmedAddress,
+      oltInfo: trimmedOlt,
+      staffs: activeStaffs,
+      complaints,
+    });
+    const fallbackStaff = areaFallback.staff || best?.staff || null;
+    const fallbackCandidate = rankedCandidates.find((c) => c.staff.id === fallbackStaff?.id);
+    return {
+      suggestedStaff: fallbackStaff,
+      confidence: fallbackStaff ? 'low' : 'none',
+      hasLocationHistory: false,
+      locationLabel,
+      ponPort: targetPonPort,
+      totalLocationComplaints,
+      resolvedCountInLocation: 0,
+      totalCountInLocation: fallbackCandidate?.totalCountInLocation || 0,
+      successRatePct: 0,
+      openTicketCount: fallbackCandidate?.openTicketCount || 0,
+      reasonBengali: fallbackStaff
+        ? `${locationLabel ? `"${locationLabel}" এলাকায়` : 'এই এলাকায়'} পূর্বের সমাধান ইতিহাস নেই — ${areaFallback.reasonBengali}`
+        : 'উপযুক্ত টেকনিশিয়ান পাওয়া যায়নি',
+      rankedCandidates,
+    };
+  }
+
+  const confidence: TechnicianHistorySuggestionResult['confidence'] =
+    best.resolvedCountInLocation >= 3 && best.successRatePct >= 70 ? 'high' : 'medium';
+
+  return {
+    suggestedStaff: best.staff,
+    confidence,
+    hasLocationHistory: true,
+    locationLabel,
+    ponPort: targetPonPort,
+    totalLocationComplaints,
+    resolvedCountInLocation: best.resolvedCountInLocation,
+    totalCountInLocation: best.totalCountInLocation,
+    successRatePct: best.successRatePct,
+    openTicketCount: best.openTicketCount,
+    reasonBengali: `${locationLabel ? `"${locationLabel}" এলাকায়` : 'এই লোকেশনে'} পূর্বের ${best.resolvedCountInLocation}/${best.totalCountInLocation}টি অভিযোগ সফলভাবে সমাধান (${best.successRatePct}% সফলতা)`,
+    rankedCandidates,
+  };
+}

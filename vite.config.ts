@@ -2,14 +2,16 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import {defineConfig, Plugin} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-const APP_VERSION = '3.0.0';
+const CONFIG_DIR = import.meta.dirname ?? path.dirname(fileURLToPath(import.meta.url));
+const APP_VERSION = '3.1.0';
 const DEFAULT_RELEASE_NOTES = [
-  'লোকেশন ও OLT PON জোন অনুযায়ী অভিযোগ আসার সাথে সাথে অটো-টেকনিশিয়ান অ্যাসাইন সিস্টেম',
-  'মোবাইলে PWA অ্যাপ ইনস্টল সমস্যার সম্পূর্ণ সমাধান (crossorigin=use-credentials ও VitePWA সার্ভিস ওয়ার্কার)',
-  'Cloud Run সার্ভার ডিপ্লয়মেন্ট ও ইনস্টল করা অ্যাপে অটো-আপডেট ডেলিভারি উন্নয়ন ও Google Picker ইন্টিগ্রেশন'
+  'সব মোবাইল ডিভাইসে স্বয়ংক্রিয় অ্যাপ আপডেট সিস্টেম (Zero-Stuck Auto-Update ও দ্রুত SW ক্যাশ সিঙ্ক)',
+  'লোকেশন ও পূর্বের সফল সার্ভিস ইতিহাস অনুযায়ী সেরা টেকনিশিয়ান সাজেস্ট সিস্টেম',
+  'স্টাফ QR আইডি কার্ড, দৈনিক/মাসিক/বাৎসরিক QR PDF স্টেটমেন্ট এবং অ্যাপ পোর্টাল কন্ট্রোল'
 ];
 
 function createAutoUpdateBuildPlugin(buildId: string, buildTime: string): Plugin {
@@ -52,7 +54,7 @@ function createAutoUpdateBuildPlugin(buildId: string, buildTime: string): Plugin
       });
     },
     closeBundle() {
-      const distDir = path.resolve(__dirname, 'dist');
+      const distDir = path.resolve(CONFIG_DIR, 'dist');
       if (!fs.existsSync(distDir)) return;
 
       try {
@@ -158,14 +160,41 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-          globIgnores: ['assets/aistudio/**', 'default_backup.json'],
+          globIgnores: [
+            'assets/aistudio/**',
+            'default_backup.json',
+            'assets/vendor-xlsx-*.js',
+            'assets/vendor-pdf-*.js',
+            'assets/vendor-charts-*.js',
+          ],
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//, /^\/version\.json/, /^\/manifest\.json/],
+          navigateFallbackDenylist: [
+            /^\/api\//,
+            /^\/version\.json/,
+            /^\/manifest\.json/,
+            /^\/sw\.js/,
+            /^\/registerSW\.js/,
+            /^\/assets\//
+          ],
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           runtimeCaching: [
+            {
+              urlPattern: /\/assets\/.*\.(?:js|css)$/i,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'app-lazy-assets-cache',
+                expiration: {
+                  maxEntries: 80,
+                  maxAgeSeconds: 60 * 60 * 24 * 30,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
               handler: 'CacheFirst',
@@ -211,7 +240,7 @@ export default defineConfig(() => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(CONFIG_DIR, '.'),
       },
     },
     build: {

@@ -258,6 +258,9 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
     [dateScopedComplaints]
   );
   const resolvedCount = resolvedList.length;
+  const criticalCount = dateScopedComplaints.filter((c) => c.priority === 'critical').length;
+  const urgentCount = dateScopedComplaints.filter((c) => c.priority === 'urgent').length;
+  const normalCount = dateScopedComplaints.filter((c) => c.priority === 'normal' || !c.priority).length;
 
   const resolvedBreakdownByTech = useMemo(() => {
     const map = new Map<string, number>();
@@ -428,50 +431,83 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
     }
   };
 
-  // Distinct color-coded priority badge renderer:
+  // High-contrast color-coded priority badge renderer:
   // Red for critical, Orange for urgent, Blue for normal
   const renderPriorityBadge = (priority: ComplaintPriority) => {
     switch (priority) {
       case 'critical':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black tracking-wide bg-red-500/15 text-red-700 dark:text-red-300 border border-red-400/40 dark:border-red-500/50 shadow-xs">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black tracking-wide bg-red-600 text-white border border-red-700 dark:border-red-500 shadow-xs">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-80" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
             </span>
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
-            <span>অতি জরুরি (Critical)</span>
+            <AlertTriangle className="w-3.5 h-3.5 text-white shrink-0" />
+            <span>অতি জরুরি • CRITICAL</span>
           </span>
         );
       case 'urgent':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold tracking-wide bg-orange-500/15 text-orange-800 dark:text-orange-300 border border-orange-400/40 dark:border-orange-500/50 shadow-xs">
-            <span className="inline-flex rounded-full h-2 w-2 bg-orange-500" />
-            <AlertCircle className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
-            <span>জরুরি (Urgent)</span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-black tracking-wide bg-orange-500 dark:bg-orange-600 text-white border border-orange-600 dark:border-orange-500 shadow-xs">
+            <span className="inline-flex rounded-full h-2 w-2 bg-white" />
+            <AlertCircle className="w-3.5 h-3.5 text-white shrink-0" />
+            <span>জরুরি • URGENT</span>
           </span>
         );
       case 'normal':
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold tracking-wide bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-400/40 dark:border-blue-500/50 shadow-xs">
-            <span className="inline-flex rounded-full h-2 w-2 bg-blue-500" />
-            <Info className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span>সাধারণ (Normal)</span>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold tracking-wide bg-blue-600 text-white border border-blue-700 dark:border-blue-500 shadow-xs">
+            <span className="inline-flex rounded-full h-2 w-2 bg-sky-200" />
+            <Info className="w-3.5 h-3.5 text-white shrink-0" />
+            <span>সাধারণ • NORMAL</span>
           </span>
         );
     }
   };
 
-  const getPriorityBorderClass = (priority: ComplaintPriority) => {
+  const getPriorityCardTheme = (priority: ComplaintPriority, isResolved: boolean) => {
     switch (priority) {
       case 'critical':
-        return 'border-l-4 border-l-red-500';
+        return {
+          cardClass: isResolved
+            ? 'border-l-[6px] border-l-red-500/80 border-red-200/90 dark:border-red-800/70 bg-gradient-to-br from-red-50/60 via-white to-slate-50/80 dark:from-red-950/25 dark:via-slate-900 dark:to-slate-900'
+            : 'border-l-[6px] border-l-red-600 border-red-300 dark:border-red-700/80 bg-gradient-to-br from-red-50/95 via-rose-50/55 to-white dark:from-red-950/45 dark:via-slate-900 dark:to-slate-900 ring-1 ring-red-500/20 dark:ring-red-500/30',
+          topBarClass: 'bg-gradient-to-r from-red-600 via-rose-500 to-red-500',
+          idChipClass: 'bg-red-100/90 dark:bg-red-950/70 text-red-900 dark:text-red-200 border-red-300 dark:border-red-800/80',
+          idIconClass: 'text-red-600 dark:text-red-400',
+          descBoxClass: 'bg-red-50/75 dark:bg-red-950/30 border-red-200/80 dark:border-red-900/60',
+          descLabelClass: 'text-red-700 dark:text-red-300',
+          descIconClass: 'text-red-600 dark:text-red-400',
+          footerClass: 'bg-red-50/80 dark:bg-red-950/30 border-red-200/80 dark:border-red-900/50'
+        };
       case 'urgent':
-        return 'border-l-4 border-l-orange-500';
+        return {
+          cardClass: isResolved
+            ? 'border-l-[6px] border-l-orange-400/80 border-orange-200/90 dark:border-orange-800/70 bg-gradient-to-br from-orange-50/55 via-white to-slate-50/80 dark:from-orange-950/20 dark:via-slate-900 dark:to-slate-900'
+            : 'border-l-[6px] border-l-orange-500 border-orange-300 dark:border-orange-700/80 bg-gradient-to-br from-orange-50/95 via-amber-50/50 to-white dark:from-orange-950/40 dark:via-slate-900 dark:to-slate-900 ring-1 ring-orange-500/15 dark:ring-orange-500/25',
+          topBarClass: 'bg-gradient-to-r from-orange-500 via-amber-500 to-orange-400',
+          idChipClass: 'bg-orange-100/90 dark:bg-orange-950/70 text-orange-900 dark:text-orange-200 border-orange-300 dark:border-orange-800/80',
+          idIconClass: 'text-orange-600 dark:text-orange-400',
+          descBoxClass: 'bg-orange-50/70 dark:bg-orange-950/25 border-orange-200/80 dark:border-orange-900/55',
+          descLabelClass: 'text-orange-800 dark:text-orange-300',
+          descIconClass: 'text-orange-600 dark:text-orange-400',
+          footerClass: 'bg-orange-50/75 dark:bg-orange-950/25 border-orange-200/80 dark:border-orange-900/50'
+        };
       case 'normal':
       default:
-        return 'border-l-4 border-l-blue-500';
+        return {
+          cardClass: isResolved
+            ? 'border-l-[6px] border-l-blue-500/75 border-blue-200/80 dark:border-blue-900/60 bg-gradient-to-br from-blue-50/50 via-white to-slate-50/80 dark:from-blue-950/20 dark:via-slate-900 dark:to-slate-900'
+            : 'border-l-[6px] border-l-blue-600 border-blue-200 dark:border-blue-800/80 bg-gradient-to-br from-blue-50/85 via-sky-50/45 to-white dark:from-blue-950/35 dark:via-slate-900 dark:to-slate-900 ring-1 ring-blue-500/10 dark:ring-blue-500/20',
+          topBarClass: 'bg-gradient-to-r from-blue-600 via-sky-500 to-blue-500',
+          idChipClass: 'bg-blue-100/90 dark:bg-blue-950/70 text-blue-900 dark:text-blue-200 border-blue-200 dark:border-blue-800/80',
+          idIconClass: 'text-blue-600 dark:text-blue-400',
+          descBoxClass: 'bg-blue-50/65 dark:bg-blue-950/25 border-blue-200/75 dark:border-blue-900/50',
+          descLabelClass: 'text-blue-800 dark:text-blue-300',
+          descIconClass: 'text-blue-600 dark:text-blue-400',
+          footerClass: 'bg-blue-50/70 dark:bg-blue-950/25 border-blue-200/70 dark:border-blue-900/45'
+        };
     }
   };
 
@@ -1144,18 +1180,55 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
             <span className="font-semibold">ফিল্টার:</span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 dark:text-slate-400">অগ্রাধিকার:</span>
-            <select
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value as any)}
-              className="px-2.5 py-1 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none font-medium"
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-slate-500 dark:text-slate-400 mr-0.5">অগ্রাধিকার:</span>
+            <button
+              type="button"
+              onClick={() => setPriorityFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
+                priorityFilter === 'all'
+                  ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 border-slate-800 dark:border-slate-200 shadow-2xs'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+              }`}
             >
-              <option value="all">সব অগ্রাধিকার (All Priorities)</option>
-              <option value="critical">🔴 অতি জরুরি (Critical - Red)</option>
-              <option value="urgent">🟠 জরুরি (Urgent - Orange)</option>
-              <option value="normal">🔵 সাধারণ (Normal - Blue)</option>
-            </select>
+              সব ({toBengaliNumber(totalCount)})
+            </button>
+            <button
+              type="button"
+              onClick={() => setPriorityFilter((prev) => (prev === 'critical' ? 'all' : 'critical'))}
+              className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 ${
+                priorityFilter === 'critical'
+                  ? 'bg-red-600 text-white border-red-600 shadow-xs'
+                  : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800/70 hover:bg-red-100 dark:hover:bg-red-950/70'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${priorityFilter === 'critical' ? 'bg-white' : 'bg-red-600'}`} />
+              <span>অতি জরুরি ({toBengaliNumber(criticalCount)})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPriorityFilter((prev) => (prev === 'urgent' ? 'all' : 'urgent'))}
+              className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all border flex items-center gap-1.5 ${
+                priorityFilter === 'urgent'
+                  ? 'bg-orange-500 text-white border-orange-500 shadow-xs'
+                  : 'bg-orange-50 dark:bg-orange-950/40 text-orange-800 dark:text-orange-300 border-orange-200 dark:border-orange-800/70 hover:bg-orange-100 dark:hover:bg-orange-950/70'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${priorityFilter === 'urgent' ? 'bg-white' : 'bg-orange-500'}`} />
+              <span>জরুরি ({toBengaliNumber(urgentCount)})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPriorityFilter((prev) => (prev === 'normal' ? 'all' : 'normal'))}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                priorityFilter === 'normal'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                  : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/70 hover:bg-blue-100 dark:hover:bg-blue-950/70'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${priorityFilter === 'normal' ? 'bg-white' : 'bg-blue-600'}`} />
+              <span>সাধারণ ({toBengaliNumber(normalCount)})</span>
+            </button>
           </div>
 
           {(isManagerOrDirector || canViewAllComplaints) && (
@@ -1288,6 +1361,7 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
             const isJustResolved = isResolved && Boolean(justResolvedIds[item.id]);
             const isInProgress = item.status === 'in_progress';
             const isPending = item.status === 'pending';
+            const priorityTheme = getPriorityCardTheme(item.priority, isResolved);
 
             const cleanPhone = (item.mobileNumber || '').replace(/[^\d]/g, '');
             const waPhone = cleanPhone.startsWith('88')
@@ -1301,16 +1375,19 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
                 key={item.id}
                 className={`rounded-2xl border transition-all duration-500 shadow-xs hover:shadow-md flex flex-col justify-between overflow-hidden ${
                   isJustResolved
-                    ? 'border-l-4 border-l-emerald-500 bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/60 dark:from-emerald-950/50 dark:via-slate-900 dark:to-teal-950/30 border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-500/70 animate-resolved-pulse'
-                    : `bg-white dark:bg-slate-900 ${getPriorityBorderClass(item.priority)} ${
-                        isPending
-                          ? 'border-amber-300 dark:border-amber-900/60'
-                          : isInProgress
-                          ? 'border-blue-300 dark:border-blue-900/60'
-                          : 'border-slate-200 dark:border-slate-800'
-                      }`
+                    ? 'border-l-[6px] border-l-emerald-500 bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/60 dark:from-emerald-950/50 dark:via-slate-900 dark:to-teal-950/30 border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-500/70 animate-resolved-pulse'
+                    : priorityTheme.cardClass
                 }`}
               >
+                {/* Top Priority Accent Bar for Instant Visual Scanning */}
+                <div
+                  className={`h-1.5 w-full ${
+                    isJustResolved
+                      ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500'
+                      : priorityTheme.topBarClass
+                  }`}
+                />
+
                 {/* Card Top: ID, Priority, and Status Badge */}
                 <div className="p-4 sm:p-5 space-y-3">
                   {isJustResolved && (
@@ -1334,8 +1411,20 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-mono font-bold text-xs border border-emerald-200 dark:border-emerald-800/80 flex items-center gap-1">
-                        <Hash className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span
+                        className={`px-2.5 py-1 rounded-lg font-mono font-bold text-xs border flex items-center gap-1 ${
+                          isJustResolved
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/80'
+                            : priorityTheme.idChipClass
+                        }`}
+                      >
+                        <Hash
+                          className={`w-3 h-3 ${
+                            isJustResolved
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : priorityTheme.idIconClass
+                          }`}
+                        />
                         {item.idNumber}
                       </span>
 
@@ -1441,9 +1530,9 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
                   )}
 
                   {/* Complain Details */}
-                  <div className="bg-slate-50 dark:bg-slate-800/80 rounded-xl p-3 border border-slate-200/80 dark:border-slate-700/80">
-                    <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                  <div className={`rounded-xl p-3 border ${priorityTheme.descBoxClass}`}>
+                    <div className={`text-[11px] font-bold mb-1 flex items-center gap-1 ${priorityTheme.descLabelClass}`}>
+                      <AlertCircle className={`w-3 h-3 ${priorityTheme.descIconClass}`} />
                       অভিযোগের বিবরণ (Problem Description):
                     </div>
                     <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 font-medium leading-relaxed whitespace-pre-line">
@@ -1539,7 +1628,13 @@ export const CustomerComplaintsView: React.FC<CustomerComplaintsViewProps> = ({
                 </div>
 
                 {/* Card Bottom Actions */}
-                <div className="bg-slate-50 dark:bg-slate-800/60 px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                <div
+                  className={`px-4 py-2.5 border-t flex flex-wrap items-center justify-between gap-2 ${
+                    isJustResolved
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-800/60'
+                      : priorityTheme.footerClass
+                  }`}
+                >
                   {/* Status Toggle & WhatsApp Group SMS Actions */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <a
